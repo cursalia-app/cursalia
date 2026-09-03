@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
+import { PdfPage } from "@/components/reader/pdf-page";
 import { saveBookPageAction } from "@/lib/actions/learner-actions";
 import { cn, formatPercent } from "@/lib/utils";
 
@@ -33,7 +34,13 @@ export function BookReader({
   const [chromeVisible, setChromeVisible] = React.useState(true);
   const [fileUrl, setFileUrl] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  /**
+   * Páginas reales del documento. Manda sobre `page_count` de la ficha para
+   * navegar: si alguien se equivocó al darlo de alta, el visor no se rompe.
+   */
+  const [loadedPages, setLoadedPages] = React.useState<number | null>(null);
   const hideTimer = React.useRef<number | null>(null);
+  const lastPage = loadedPages ?? pageCount;
 
   /* La URL firmada la emite el servidor: caduca y va atada a la IP. */
   React.useEffect(() => {
@@ -61,8 +68,8 @@ export function BookReader({
   }, [page, bookId]);
 
   const go = React.useCallback(
-    (delta: number) => setPage((p) => Math.min(pageCount, Math.max(1, p + delta))),
-    [pageCount],
+    (delta: number) => setPage((p) => Math.min(lastPage, Math.max(1, p + delta))),
+    [lastPage],
   );
 
   React.useEffect(() => {
@@ -89,7 +96,7 @@ export function BookReader({
     };
   }, []);
 
-  const ratio = page / pageCount;
+  const ratio = page / lastPage;
 
   return (
     <div
@@ -125,10 +132,18 @@ export function BookReader({
         ) : null}
       </header>
 
-      {/* Superficie de página. Aquí se monta pdf.js sobre la URL firmada. */}
+      {/* Superficie de página: pdf.js dibuja sobre la URL firmada. */}
       <div className="flex flex-1 items-center justify-center overflow-hidden px-4 py-16">
-        <div className="relative aspect-[1/1.414] h-full max-h-full w-auto max-w-full overflow-hidden rounded-[4px] border border-line bg-[#141414]">
-          {fileUrl ? null : (
+        <div
+          className={cn(
+            "relative h-full max-h-full max-w-full overflow-hidden rounded-[4px] border border-line bg-[#141414]",
+            // Sin documento todavía, se reserva el hueco con proporción de folio.
+            fileUrl && !error ? "w-auto" : "aspect-[1/1.414] w-auto",
+          )}
+        >
+          {fileUrl && !error ? (
+            <PdfPage url={fileUrl} page={page} onDocumentLoaded={setLoadedPages} onError={setError} />
+          ) : (
             <div className="flex size-full flex-col items-center justify-center gap-2 px-8 text-center">
               <span className="num text-4xl text-line-strong">{page}</span>
               <p className="mt-2 text-sm text-muted">
@@ -182,7 +197,7 @@ export function BookReader({
           <input
             type="range"
             min={1}
-            max={pageCount}
+            max={lastPage}
             value={page}
             onChange={(e) => setPage(Number(e.target.value))}
             aria-label="Ir a página"
@@ -193,13 +208,13 @@ export function BookReader({
           />
 
           <span className="num w-20 shrink-0 text-center text-[11px] text-subtle">
-            {page} / {pageCount}
+            {page} / {lastPage}
           </span>
 
           <button
             type="button"
             onClick={() => go(1)}
-            disabled={page === pageCount}
+            disabled={page === lastPage}
             aria-label="Página siguiente"
             className="p-2 text-muted disabled:opacity-30 hover:text-foreground"
           >

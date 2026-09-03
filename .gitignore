@@ -42,3 +42,6 @@ next-env.d.ts
 
 # El ejemplo de configuración sí se versiona: es documentación.
 !.env.local.example
+
+# Copiado por postinstall desde pdfjs-dist; no se versiona.
+public/pdf.worker.min.mjs

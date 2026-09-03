@@ -51,6 +51,10 @@ Crea una **Stream Library** y una **Storage Zone**. De cada una necesitas la
 clave de API, el nombre del host CDN y la clave de firma de URLs (*Token
 Authentication*), que hay que activar en ambas. Todo va a `.env.local`.
 
+En la *pull zone* de la Storage Zone hay que **habilitar las cabeceras CORS**
+para el dominio del sitio. El visor de libros lee el PDF desde el navegador con
+pdf.js, y sin CORS el archivo se descarga pero no se puede pintar.
+
 ### 4. Pagos
 
 El cobro lo gestiona el equipo fuera de esta aplicación. Aquí solo se consumen
