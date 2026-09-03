@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/*
+ * Cursalia — sistema de diseño.
+ * Escala neutra pura (sin tinte azul), dark-only.
+ * El color está reservado a estado: nunca decora.
+ */
+@theme {
+  --color-background: #0a0a0a;
+  --color-surface: #121212;
+  --color-card: #1a1a1a;
+  --color-elevated: #222222;
+
+  --color-foreground: #ededed;
+  --color-muted: #a1a1a1;
+  --color-subtle: #6e6e6e;
+
+  --color-line: #262626;
+  --color-line-strong: #3a3a3a;
+
+  --color-primary: #fafafa;
+  --color-primary-foreground: #0a0a0a;
+
+  --color-danger: #e5484d;
+  --color-warn: #d9a34a;
+  --color-success: #4a9e6b;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-base: 10px;
+
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-rise: rise 0.25s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+
+  /* Un solo anillo de foco en todo el producto. */
+  :focus-visible {
+    outline: 2px solid var(--color-line-strong);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: #2f2f2f;
+    color: var(--color-foreground);
+  }
+}
+
+@layer utilities {
+  /* Cifras tabulares: contadores, duraciones, importes. */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
