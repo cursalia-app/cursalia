@@ -6,10 +6,31 @@ import { MissingConfigError } from "@/lib/env";
  * Entrada de eventos de la pasarela. Se lee el cuerpo CRUDO: la firma se calcula
  * sobre los bytes exactos que llegaron, no sobre un JSON reserializado.
  */
+
+/** Un evento de la pasarela pesa unos cientos de bytes. Cualquier cosa por
+ * encima de 16 KB es abuso, no un pago legítimo. */
+const MAX_BODY_BYTES = 16 * 1024;
+/** SHA-256 en hexadecimal ocupa 64 caracteres; con prefijo `sha256=` no supera
+ * 128. Rechazar antes evita comparaciones sobre buffers gigantes. */
+const MAX_SIGNATURE_LENGTH = 256;
+
 export async function POST(request: NextRequest) {
-  const rawBody = await request.text();
+  const contentLength = Number(request.headers.get("content-length") ?? "");
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
+  }
+
   const signature =
     request.headers.get("x-cursalia-signature") ?? request.headers.get("x-signature");
+
+  if (signature && signature.length > MAX_SIGNATURE_LENGTH) {
+    return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
+  }
+
+  const rawBody = await request.text();
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
+  }
 
   let result;
   try {

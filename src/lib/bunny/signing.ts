@@ -18,8 +18,20 @@ export interface SignOptions {
   /** Ruta con barra inicial, tal y como la ve el CDN. */
   path: string;
   expiresAt: Date;
-  /** Ata la URL a una IP. Si se omite, la URL sirve desde cualquier sitio. */
-  clientIp?: string | null;
+  /**
+   * IP del cliente al que se ata la URL. Es OBLIGATORIA: una URL sin IP vale
+   * desde cualquier sitio y anula la razón misma de firmar. Si no se conoce
+   * la IP, no se firma; el llamante debe decidir qué hacer.
+   */
+  clientIp: string;
+}
+
+/** Error específico: el llamante no tiene forma de saber la IP del cliente. */
+export class MissingClientIpError extends Error {
+  constructor() {
+    super("client_ip_required");
+    this.name = "MissingClientIpError";
+  }
 }
 
 /**
@@ -38,12 +50,13 @@ export function resolveExpiry(accessExpiresAt: Date | null, now = new Date()): D
  * opcionalmente, la IP del cliente.
  */
 export function signUrl({ securityKey, hostname, path, expiresAt, clientIp }: SignOptions): string {
+  if (!clientIp) throw new MissingClientIpError();
+
   const expires = Math.floor(expiresAt.getTime() / 1000);
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const ip = clientIp ?? "";
 
   const token = createHash("sha256")
-    .update(`${securityKey}${normalizedPath}${expires}${ip}`)
+    .update(`${securityKey}${normalizedPath}${expires}${clientIp}`)
     .digest("base64")
     .replace(/\n/g, "")
     .replace(/\+/g, "-")
@@ -53,7 +66,7 @@ export function signUrl({ securityKey, hostname, path, expiresAt, clientIp }: Si
   const url = new URL(`https://${hostname}${normalizedPath}`);
   url.searchParams.set("token", token);
   url.searchParams.set("expires", String(expires));
-  if (clientIp) url.searchParams.set("token_ip", clientIp);
+  url.searchParams.set("token_ip", clientIp);
 
   return url.toString();
 }

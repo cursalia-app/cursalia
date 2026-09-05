@@ -97,7 +97,7 @@ describe("getSignedVideoUrl", () => {
   it("la URL caduca al acabar la prueba si eso ocurre antes de las 4 horas", async () => {
     grantedScenario({ rpc: { access_expires_at: ok("2026-09-03T12:20:00.000Z") } });
 
-    const signed = await getSignedVideoUrl(LESSON, USER, null);
+    const signed = await getSignedVideoUrl(LESSON, USER, "10.0.0.1");
 
     expect(signed.expiresAt).toBe("2026-09-03T12:20:00.000Z");
   });
@@ -105,7 +105,7 @@ describe("getSignedVideoUrl", () => {
   it("nunca dura más de 4 horas, aunque la suscripción llegue hasta el año que viene", async () => {
     grantedScenario({ rpc: { access_expires_at: ok("2027-01-01T00:00:00.000Z") } });
 
-    const signed = await getSignedVideoUrl(LESSON, USER, null);
+    const signed = await getSignedVideoUrl(LESSON, USER, "10.0.0.1");
 
     expect(signed.expiresAt).toBe("2026-09-03T16:00:00.000Z");
   });
@@ -115,7 +115,7 @@ describe("getSignedVideoUrl", () => {
       tables: { lessons: ok({ id: LESSON, video_id: null, video_provider: "bunny", is_published: true }) },
     });
 
-    await expect(getSignedVideoUrl(LESSON, USER, null)).rejects.toBeInstanceOf(VideoNotFoundError);
+    await expect(getSignedVideoUrl(LESSON, USER, "10.0.0.1")).rejects.toBeInstanceOf(VideoNotFoundError);
   });
 
   it("un capítulo sin publicar tampoco, ni siquiera con acceso", async () => {
@@ -125,7 +125,15 @@ describe("getSignedVideoUrl", () => {
       },
     });
 
-    await expect(getSignedVideoUrl(LESSON, USER, null)).rejects.toBeInstanceOf(VideoNotFoundError);
+    await expect(getSignedVideoUrl(LESSON, USER, "10.0.0.1")).rejects.toBeInstanceOf(VideoNotFoundError);
+  });
+
+  it("sin IP no se emite URL, aunque el acceso esté concedido: una URL sin atar vale desde cualquier sitio", async () => {
+    const instance = grantedScenario();
+
+    await expect(getSignedVideoUrl(LESSON, USER, null)).rejects.toBeInstanceOf(AccessDeniedError);
+    // La comprobación de IP corta antes de leer datos: nada de tocar `lessons`.
+    expect(instance.queryFor("lessons")).toBeUndefined();
   });
 });
 

@@ -50,6 +50,8 @@ export async function getSignedVideoUrl(
 ): Promise<SignedVideo> {
   // Primero el acceso. Si no lo hay, no se toca la base de datos ni Bunny.
   if (!(await hasContentAccess(userId))) throw new AccessDeniedError();
+  // Sin IP no se firma: una URL desatada anularía el propósito de la firma.
+  if (!ip) throw new AccessDeniedError();
 
   const supabase = await createSupabaseServerClient();
 

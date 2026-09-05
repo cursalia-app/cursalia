@@ -91,6 +91,7 @@ export async function getSignedBookUrl(
   ip: string | null,
 ): Promise<SignedDocument> {
   if (!(await hasContentAccess(userId))) throw new AccessDeniedError();
+  if (!ip) throw new AccessDeniedError();
 
   const supabase = await createSupabaseServerClient();
 
