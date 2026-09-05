@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { handleWebhookEvent } from "@/lib/services/billing-service";
+import { MissingConfigError } from "@/lib/env";
 
 /**
  * Entrada de eventos de la pasarela. Se lee el cuerpo CRUDO: la firma se calcula
@@ -10,7 +11,16 @@ export async function POST(request: NextRequest) {
   const signature =
     request.headers.get("x-cursalia-signature") ?? request.headers.get("x-signature");
 
-  const result = await handleWebhookEvent(rawBody, signature);
+  let result;
+  try {
+    result = await handleWebhookEvent(rawBody, signature);
+  } catch (error) {
+    if (error instanceof MissingConfigError) {
+      // Sin secreto configurado no se puede verificar nada: mejor rechazar.
+      return NextResponse.json({ error: "not_configured" }, { status: 503 });
+    }
+    throw error;
+  }
 
   switch (result.status) {
     case "invalid_signature":

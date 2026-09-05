@@ -1,6 +1,6 @@
 import { getAccessExpiry, hasContentAccess } from "@/lib/services/access-service";
 import { resolveExpiry, signUrl } from "@/lib/bunny/signing";
-import { getServerEnv } from "@/lib/env";
+import { getBunnyStreamEnv } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -64,7 +64,7 @@ export async function getSignedVideoUrl(
 
   if (!lesson?.video_id || !lesson.is_published) throw new VideoNotFoundError();
 
-  const env = getServerEnv();
+  const env = getBunnyStreamEnv();
   const expiresAt = resolveExpiry(await getAccessExpiry(userId));
 
   const url = signUrl({
@@ -86,7 +86,7 @@ const BUNNY_API = "https://video.bunnycdn.com";
 
 /** Alta de un vídeo en Bunny para poder subir el archivo después. */
 export async function createVideo(title: string): Promise<{ videoId: string }> {
-  const env = getServerEnv();
+  const env = getBunnyStreamEnv();
 
   const response = await fetch(`${BUNNY_API}/library/${env.BUNNY_STREAM_LIBRARY_ID}/videos`, {
     method: "POST",
@@ -110,7 +110,7 @@ export async function createVideo(title: string): Promise<{ videoId: string }> {
 
 /** Estado de codificación. Un capítulo no debería publicarse antes de `finished`. */
 export async function getVideoStatus(videoId: string): Promise<EncodingStatus> {
-  const env = getServerEnv();
+  const env = getBunnyStreamEnv();
 
   const response = await fetch(
     `${BUNNY_API}/library/${env.BUNNY_STREAM_LIBRARY_ID}/videos/${videoId}`,
@@ -125,7 +125,7 @@ export async function getVideoStatus(videoId: string): Promise<EncodingStatus> {
 
 /** Duración en segundos que Bunny calcula tras codificar. */
 export async function getVideoDuration(videoId: string): Promise<number | null> {
-  const env = getServerEnv();
+  const env = getBunnyStreamEnv();
 
   const response = await fetch(
     `${BUNNY_API}/library/${env.BUNNY_STREAM_LIBRARY_ID}/videos/${videoId}`,

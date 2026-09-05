@@ -3,11 +3,11 @@ import { asClient, ok, SupabaseStub, type SupabaseStubConfig } from "@/lib/servi
 import { MAX_SIGNED_URL_SECONDS, resolveExpiry } from "@/lib/bunny/signing";
 
 const createSupabaseServerClient = vi.hoisted(() => vi.fn());
-const getServerEnv = vi.hoisted(() => vi.fn());
+const getBunnyStreamEnv = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: vi.fn() }));
-vi.mock("@/lib/env", () => ({ getServerEnv, getPublicEnv: vi.fn() }));
+vi.mock("@/lib/env", () => ({ getBunnyStreamEnv, getPublicEnv: vi.fn() }));
 
 const { AccessDeniedError, VideoNotFoundError, getSignedVideoUrl } = await import(
   "@/lib/services/video-service"
@@ -44,7 +44,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
 
-  getServerEnv.mockReturnValue({
+  getBunnyStreamEnv.mockReturnValue({
     BUNNY_STREAM_TOKEN_KEY: "clave-secreta",
     BUNNY_STREAM_CDN_HOSTNAME: "vz-test.b-cdn.net",
     BUNNY_STREAM_LIBRARY_ID: "1234",

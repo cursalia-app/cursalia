@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { generateCommissionForPayment } from "@/lib/services/affiliate-service";
 import { log } from "@/lib/services/audit-service";
-import { getServerEnv } from "@/lib/env";
+import { getPaymentsEnv } from "@/lib/env";
 import type { Subscription } from "@/lib/types/domain";
 
 /**
@@ -72,7 +72,7 @@ export async function handleWebhookEvent(
   rawBody: string,
   signature: string | null,
 ): Promise<WebhookResult> {
-  const { PAYMENTS_WEBHOOK_SECRET } = getServerEnv();
+  const { PAYMENTS_WEBHOOK_SECRET } = getPaymentsEnv();
 
   // Sin firma válida no se lee siquiera el contenido.
   if (!signature || !verifySignature(rawBody, signature, PAYMENTS_WEBHOOK_SECRET)) {

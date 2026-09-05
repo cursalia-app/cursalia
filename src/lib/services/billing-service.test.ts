@@ -4,12 +4,12 @@ import { asClient, fail, ok, SupabaseStub, type SupabaseStubConfig } from "@/lib
 
 const createSupabaseServerClient = vi.hoisted(() => vi.fn());
 const createSupabaseAdminClient = vi.hoisted(() => vi.fn());
-const getServerEnv = vi.hoisted(() => vi.fn());
+const getPaymentsEnv = vi.hoisted(() => vi.fn());
 const generateCommissionForPayment = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient }));
-vi.mock("@/lib/env", () => ({ getServerEnv, getPublicEnv: vi.fn() }));
+vi.mock("@/lib/env", () => ({ getPaymentsEnv, getPublicEnv: vi.fn() }));
 vi.mock("@/lib/services/affiliate-service", () => ({ generateCommissionForPayment }));
 
 const { handleWebhookEvent, verifySignature } = await import("@/lib/services/billing-service");
@@ -72,7 +72,7 @@ function happyPath(overrides: SupabaseStubConfig = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getServerEnv.mockReturnValue({ PAYMENTS_WEBHOOK_SECRET: SECRET });
+  getPaymentsEnv.mockReturnValue({ PAYMENTS_WEBHOOK_SECRET: SECRET });
   generateCommissionForPayment.mockResolvedValue(null);
 });
 

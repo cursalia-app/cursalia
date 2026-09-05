@@ -2,9 +2,12 @@ import { z } from "zod";
 
 /**
  * Variables de entorno. Nada de secretos escritos en el código.
- * Las de servidor se leen de forma perezosa: así el navegador nunca las toca y
- * un despliegue sin configurar falla en el arranque del servidor, no en producción
- * a mitad de una petición.
+ *
+ * Se validan POR GRUPOS y solo cuando hacen falta. Así se puede levantar la
+ * plataforma con Supabase configurado y nada más: el catálogo, el panel y el
+ * progreso funcionan, y solo al pedir un vídeo o un libro se avisa de que falta
+ * configurar Bunny. Exigirlo todo de golpe convertiría cualquier hueco en una
+ * pantalla en blanco sin explicación.
  */
 
 const publicSchema = z.object({
@@ -13,21 +16,44 @@ const publicSchema = z.object({
   NEXT_PUBLIC_SITE_URL: z.string().url(),
 });
 
-const serverSchema = z.object({
+const supabaseAdminSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+});
+
+const bunnyStreamSchema = z.object({
   BUNNY_STREAM_LIBRARY_ID: z.string().min(1),
   BUNNY_STREAM_API_KEY: z.string().min(1),
   BUNNY_STREAM_CDN_HOSTNAME: z.string().min(1),
   BUNNY_STREAM_TOKEN_KEY: z.string().min(1),
+});
+
+const bunnyStorageSchema = z.object({
   BUNNY_STORAGE_ZONE: z.string().min(1),
   BUNNY_STORAGE_API_KEY: z.string().min(1),
   BUNNY_STORAGE_CDN_HOSTNAME: z.string().min(1),
   BUNNY_STORAGE_TOKEN_KEY: z.string().min(1),
+});
+
+const paymentsSchema = z.object({
   PAYMENTS_WEBHOOK_SECRET: z.string().min(1),
 });
 
 export type PublicEnv = z.infer<typeof publicSchema>;
-export type ServerEnv = z.infer<typeof serverSchema>;
+export type SupabaseAdminEnv = z.infer<typeof supabaseAdminSchema>;
+export type BunnyStreamEnv = z.infer<typeof bunnyStreamSchema>;
+export type BunnyStorageEnv = z.infer<typeof bunnyStorageSchema>;
+export type PaymentsEnv = z.infer<typeof paymentsSchema>;
+
+/** Falta configuración. Se distingue de un fallo real para poder contarlo bien. */
+export class MissingConfigError extends Error {
+  constructor(
+    readonly area: string,
+    readonly keys: string[],
+  ) {
+    super(`Falta configurar ${area}: ${keys.join(", ")}`);
+    this.name = "MissingConfigError";
+  }
+}
 
 /**
  * Next sustituye `process.env.NEXT_PUBLIC_*` en tiempo de compilación solo cuando
@@ -41,14 +67,45 @@ export function getPublicEnv(): PublicEnv {
   });
 }
 
-let cachedServerEnv: ServerEnv | null = null;
+const cache = new Map<string, unknown>();
 
-export function getServerEnv(): ServerEnv {
+function readGroup<T>(area: string, schema: z.ZodType<T>): T {
   if (typeof window !== "undefined") {
-    throw new Error("getServerEnv se ha llamado desde el navegador");
+    throw new Error(`La configuración de ${area} no puede leerse desde el navegador`);
   }
-  if (!cachedServerEnv) {
-    cachedServerEnv = serverSchema.parse(process.env);
+
+  const cached = cache.get(area);
+  if (cached) return cached as T;
+
+  const result = schema.safeParse(process.env);
+  if (!result.success) {
+    throw new MissingConfigError(
+      area,
+      result.error.issues.map((issue) => String(issue.path[0])),
+    );
   }
-  return cachedServerEnv;
+
+  cache.set(area, result.data);
+  return result.data;
+}
+
+export function getSupabaseAdminEnv(): SupabaseAdminEnv {
+  return readGroup("Supabase", supabaseAdminSchema);
+}
+
+export function getBunnyStreamEnv(): BunnyStreamEnv {
+  return readGroup("Bunny Stream", bunnyStreamSchema);
+}
+
+export function getBunnyStorageEnv(): BunnyStorageEnv {
+  return readGroup("Bunny Storage", bunnyStorageSchema);
+}
+
+export function getPaymentsEnv(): PaymentsEnv {
+  return readGroup("la pasarela de pagos", paymentsSchema);
+}
+
+/** Solo para los tests: la caché vive en memoria del proceso. */
+export function clearEnvCache(): void {
+  cache.clear();
 }

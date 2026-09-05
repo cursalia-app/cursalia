@@ -1,6 +1,6 @@
 import { getAccessExpiry, hasContentAccess } from "@/lib/services/access-service";
 import { resolveExpiry, signUrl } from "@/lib/bunny/signing";
-import { getServerEnv } from "@/lib/env";
+import { getBunnyStorageEnv } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AccessDeniedError } from "@/lib/services/video-service";
 import type { BookWithProgress } from "@/lib/types/domain";
@@ -105,7 +105,7 @@ export async function getSignedBookUrl(
 
   if (!book?.file_path) throw new BookNotFoundError();
 
-  const env = getServerEnv();
+  const env = getBunnyStorageEnv();
   const expiresAt = resolveExpiry(await getAccessExpiry(userId));
 
   const url = signUrl({

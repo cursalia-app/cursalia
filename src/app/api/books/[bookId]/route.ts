@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/supabase/server";
 import { BookNotFoundError, getSignedBookUrl } from "@/lib/services/book-service";
 import { AccessDeniedError } from "@/lib/services/video-service";
 import { clientIpFrom } from "@/lib/http/request";
+import { MissingConfigError } from "@/lib/env";
 
 export async function GET(
   request: NextRequest,
@@ -21,6 +22,10 @@ export async function GET(
   } catch (error) {
     if (error instanceof AccessDeniedError) {
       return NextResponse.json({ error: "access_denied" }, { status: 403 });
+    }
+    if (error instanceof MissingConfigError) {
+      // Configuración incompleta, no un fallo del sistema: se dice qué falta.
+      return NextResponse.json({ error: "not_configured", detail: error.message }, { status: 503 });
     }
     if (error instanceof BookNotFoundError) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
