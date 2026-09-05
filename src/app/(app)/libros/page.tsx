@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BookCard } from "@/components/catalog/book-card";
+import { BooksGrid } from "@/components/catalog/books-grid";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/ui/primitives";
 import { listBooks } from "@/lib/services/book-service";
@@ -22,11 +22,7 @@ export default async function BooksPage() {
           description="Todavía no hay libros publicados."
         />
       ) : (
-        <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
-          {books.map((book) => (
-            <BookCard key={book.id} book={book} />
-          ))}
-        </div>
+        <BooksGrid books={books} />
       )}
     </div>
   );

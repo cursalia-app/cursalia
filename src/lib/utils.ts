@@ -37,3 +37,15 @@ export function formatDate(value: string | Date): string {
   const date = typeof value === "string" ? new Date(value) : value;
   return new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
+
+/**
+ * Normaliza texto para búsqueda: minúsculas y sin diacríticos.
+ * "Diseño Gráfico" y "diseno grafico" pasan a ser lo mismo.
+ */
+export function normalizeSearch(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
