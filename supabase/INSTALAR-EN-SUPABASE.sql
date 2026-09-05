@@ -977,6 +977,10 @@ revoke execute on function public.has_book_progress(uuid, uuid)   from public, a
 revoke execute on function public.is_admin()                      from public, anon, authenticated;
 revoke execute on function public.get_setting_int(text)           from public, authenticated;
 
+-- El guard es una condición afirmativa, no `uid <> auth.uid()`: comparar
+-- contra null en SQL da NULL (lógica de tres valores), y el CASE caería al
+-- ELSE dejando pasar consultas anónimas. Se exige explícitamente admin o
+-- coincidencia con auth.uid().
 create or replace function public.has_content_access(uid uuid)
 returns boolean
 language sql
@@ -985,9 +989,9 @@ security definer
 set search_path = public
 as $$
   select case
-    when uid is null then false
-    when uid <> (select auth.uid()) and not (select public.is_admin()) then false
-    else exists (
+    when (select public.is_admin())
+      or (uid is not null and uid = (select auth.uid()))
+    then exists (
       select 1 from public.subscriptions s
       where s.user_id = uid
         and (
@@ -1008,6 +1012,7 @@ as $$
         and now() < p.trial_started_at
                     + (public.get_setting_int('trial_duration_minutes') || ' minutes')::interval
     )
+    else false
   end;
 $$;
 
@@ -1019,9 +1024,9 @@ security definer
 set search_path = public
 as $$
   select case
-    when uid is null then null
-    when uid <> (select auth.uid()) and not (select public.is_admin()) then null
-    else greatest(
+    when (select public.is_admin())
+      or (uid is not null and uid = (select auth.uid()))
+    then greatest(
       coalesce((
         select max(
           case
@@ -1038,6 +1043,7 @@ as $$
         from public.profiles p where p.id = uid and p.trial_started_at is not null
       ), '-infinity'::timestamptz)
     )
+    else null
   end;
 $$;
 
