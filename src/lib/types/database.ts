@@ -278,6 +278,23 @@ export type Database = {
         Args: Record<string, never>;
         Returns: unknown;
       };
+      admin_extend_access: {
+        Args: {
+          target_user_id: string;
+          months?: number;
+          amount_cents?: number | null;
+          note?: string | null;
+        };
+        Returns: unknown;
+      };
+      admin_revoke_access: {
+        Args: { target_user_id: string; reason?: string | null };
+        Returns: unknown;
+      };
+      admin_upcoming_expirations: {
+        Args: { days_ahead?: number };
+        Returns: unknown;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

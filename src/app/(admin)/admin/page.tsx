@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/layout/page-header";
 import { Stat } from "@/components/ui/stat";
 import { Card } from "@/components/ui/primitives";
+import { ExpiringPanel } from "@/components/admin/expiring-panel";
 import { listAuditEntries } from "@/lib/services/audit-service";
 import {
   getAdminMetrics,
@@ -10,6 +11,7 @@ import {
   listCategoriesForAdmin,
   listCommissionsForAdmin,
   listCoursesForAdmin,
+  listUpcomingExpirations,
 } from "@/lib/services/admin-query-service";
 import { formatCents, formatDate } from "@/lib/utils";
 
@@ -22,6 +24,8 @@ const ACTION_LABELS: Record<string, string> = {
   payment_recorded: "Pago registrado",
   subscription_updated: "Suscripción actualizada",
   trial_blocked_ip_reuse: "Trial bloqueado (IP repetida)",
+  access_extended: "Acceso extendido",
+  access_revoked: "Acceso cortado",
 };
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -36,13 +40,14 @@ const ENTITY_LABELS: Record<string, string> = {
 };
 
 export default async function AdminHomePage() {
-  const [metrics, categories, courses, books, commissions, audit] = await Promise.all([
+  const [metrics, categories, courses, books, commissions, audit, expiring] = await Promise.all([
     getAdminMetrics(),
     listCategoriesForAdmin(),
     listCoursesForAdmin(),
     listBooksForAdmin(),
     listCommissionsForAdmin(),
     listAuditEntries({ limit: 12 }),
+    listUpcomingExpirations(7),
   ]);
 
   const published = courses.filter((course) => course.status === "published").length;
@@ -105,6 +110,21 @@ export default async function AdminHomePage() {
           </Link>
         ))}
       </div>
+
+      <section>
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="text-[13px] font-medium uppercase tracking-wider text-subtle">
+            Vencimientos de acceso
+          </h2>
+          <Link
+            href="/admin/usuarios"
+            className="text-[12px] text-muted hover:text-foreground"
+          >
+            Ver todos los usuarios
+          </Link>
+        </div>
+        <ExpiringPanel items={expiring} />
+      </section>
 
       <div className="grid gap-8 lg:grid-cols-2">
         <section>

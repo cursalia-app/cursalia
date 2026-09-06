@@ -45,11 +45,11 @@ export default async function AccountPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
-            <CardTitle>Suscripción</CardTitle>
-            {subscription?.status === "active" ? (
-              <Badge tone="success">Activa</Badge>
+            <CardTitle>Acceso</CardTitle>
+            {subscription?.isActive ? (
+              <Badge tone="success">Activo</Badge>
             ) : subscription?.status === "past_due" ? (
-              <Badge tone="warn">Pago pendiente</Badge>
+              <Badge tone="warn">Impago</Badge>
             ) : access.kind === "trial" ? (
               <Badge tone="outline">Prueba en curso</Badge>
             ) : (
@@ -58,17 +58,19 @@ export default async function AccountPage() {
           </div>
           <CardDescription>
             {subscription?.status === "active" && subscription.currentPeriodEnd
-              ? `Se renueva el ${formatDate(subscription.currentPeriodEnd)}.`
+              ? `Tienes acceso hasta el ${formatDate(subscription.currentPeriodEnd)}. Cuando se acerque la fecha, contacta con nosotros para renovar y evitar que se corte.`
               : subscription?.status === "past_due"
-                ? `No hemos podido cobrar el último recibo. Tienes ${graceDays} días de cortesía antes de perder el acceso.`
+                ? `Aún no hemos confirmado tu último pago. Tienes ${graceDays} días de cortesía antes de perder el acceso.`
                 : access.kind === "trial"
-                  ? "Estás en la prueba gratuita. Suscríbete para conservar el acceso cuando termine."
-                  : "Tu acceso al catálogo está cerrado. Tu progreso sigue guardado."}
+                  ? "Estás en la prueba gratuita. Cuando termine, escríbenos para activar tu cuenta mensual."
+                  : "Tu acceso está cerrado. Tu progreso sigue guardado. Contacta con soporte para reactivarlo."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm">
-            Gestionar pago
+        <CardContent>
+          <Button asChild variant="secondary" size="sm">
+            <a href="mailto:soporte@cursalia.com?subject=Renovar%20mi%20acceso">
+              Contactar para renovar
+            </a>
           </Button>
         </CardContent>
       </Card>

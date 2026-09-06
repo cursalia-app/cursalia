@@ -181,4 +181,39 @@ begin
   ) then raise exception 'admin_metrics no accesible por authenticated'; end if;
 end $$;
 
-select 'OK: guards, RLS, policies, índices, rate limit, trial guard, búsqueda y métricas verificados' as resultado;
+-- 11) has_content_access verifica current_period_end. Un active con fecha en
+--     el pasado NO debe dar acceso (bug del modelo anterior con webhooks).
+do $$
+declare
+  fn_source text;
+begin
+  select pg_get_functiondef(p.oid) into fn_source
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname='public' and p.proname='has_content_access';
+
+  if fn_source not like '%current_period_end%' then
+    raise exception 'has_content_access no comprueba current_period_end';
+  end if;
+end $$;
+
+-- 12) RPCs de cobro manual expuestas a authenticated con guard is_admin() dentro.
+do $$
+declare
+  fn text;
+begin
+  foreach fn in array array['admin_extend_access', 'admin_revoke_access', 'admin_upcoming_expirations']
+  loop
+    if not exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname='public' and p.proname = fn
+    ) then raise exception 'falta la función %', fn; end if;
+
+    if exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname='public' and p.proname = fn
+        and has_function_privilege('anon', p.oid, 'EXECUTE')
+    ) then raise exception '% accesible por anon', fn; end if;
+  end loop;
+end $$;
+
+select 'OK: seguridad completa (guards, RLS, policies, índices, rate limit, trial guard, búsqueda, métricas y cobro manual)' as resultado;

@@ -259,9 +259,17 @@ export async function getSubscriptionState(userId: string): Promise<Subscription
 
   if (!data) return null;
 
+  // `isActive` viaja calculado desde aquí para que los componentes de página
+  // no llamen `Date.now()` durante el render (regla de pureza de React 19).
+  const isActive =
+    data.status === "active" &&
+    Boolean(data.current_period_end) &&
+    new Date(data.current_period_end as string).getTime() > Date.now();
+
   return {
     status: data.status,
     currentPeriodEnd: data.current_period_end,
     pastDueSince: data.past_due_since,
+    isActive,
   };
 }

@@ -81,6 +81,10 @@ export interface AdminUser {
   trialStatus: "active" | "expired" | "never";
   isAdmin: boolean;
   subscriptionStatus: SubscriptionStatus | null;
+  /** Fin del acceso pagado. Null si nunca hubo suscripción. */
+  currentPeriodEnd: string | null;
+  /** True si el acceso está en 'active' pero la fecha ya pasó. */
+  isAccessExpired: boolean;
   deviceCount: number;
   /** IP desde la que se registró. Útil para investigar abusos de trial. */
   signupIp: string | null;
@@ -277,9 +281,17 @@ export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
   const [{ data: subscriptions }, { data: devices }, { data: setting }] = await Promise.all([
     supabase
       .from("subscriptions")
-      .select("user_id, status, created_at")
+      .select("user_id, status, current_period_end, created_at")
       .in("user_id", ids)
-      .returns<{ user_id: string; status: SubscriptionStatus; created_at: string }[]>(),
+      .order("created_at", { ascending: false })
+      .returns<
+        {
+          user_id: string;
+          status: SubscriptionStatus;
+          current_period_end: string | null;
+          created_at: string;
+        }[]
+      >(),
     supabase
       .from("user_devices")
       .select("user_id, released_at")
@@ -289,9 +301,18 @@ export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
     supabase.from("app_settings").select("value").eq("key", "trial_duration_minutes").maybeSingle(),
   ]);
 
-  const statusByUser = new Map<string, SubscriptionStatus>();
+  const subByUser = new Map<
+    string,
+    { status: SubscriptionStatus; currentPeriodEnd: string | null }
+  >();
   for (const subscription of subscriptions ?? []) {
-    if (!statusByUser.has(subscription.user_id)) statusByUser.set(subscription.user_id, subscription.status);
+    // Ordenamos por created_at desc, así que la primera vista es la más reciente.
+    if (!subByUser.has(subscription.user_id)) {
+      subByUser.set(subscription.user_id, {
+        status: subscription.status,
+        currentPeriodEnd: subscription.current_period_end,
+      });
+    }
   }
 
   const devicesByUser = new Map<string, number>();
@@ -309,6 +330,11 @@ export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
         ? "active"
         : "expired";
 
+    const sub = subByUser.get(profile.id);
+    const isAccessExpired =
+      sub?.status === "active" &&
+      Boolean(sub.currentPeriodEnd) &&
+      new Date(sub.currentPeriodEnd as string).getTime() < now;
     return {
       id: profile.id,
       email: profile.email,
@@ -316,7 +342,9 @@ export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
       trialStartedAt: profile.trial_started_at,
       trialStatus,
       isAdmin: profile.is_admin,
-      subscriptionStatus: statusByUser.get(profile.id) ?? null,
+      subscriptionStatus: sub?.status ?? null,
+      currentPeriodEnd: sub?.currentPeriodEnd ?? null,
+      isAccessExpired,
       deviceCount: devicesByUser.get(profile.id) ?? 0,
       signupIp: profile.signup_ip,
     };
@@ -414,6 +442,46 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
 export interface AdminSettings {
   key: string;
   value: number;
+}
+
+export interface AdminExpiringSubscription {
+  subscriptionId: string;
+  userId: string;
+  email: string;
+  currentPeriodEnd: string;
+  kind: "upcoming" | "expired";
+  daysLeft: number;
+}
+
+/**
+ * Suscripciones que están a punto de caducar o que ya caducaron. La vista
+ * que necesita el admin para revisar quién ha pagado el nuevo mes y quién
+ * no. La ventana futura es configurable; los vencidos siempre entran.
+ */
+export async function listUpcomingExpirations(
+  daysAhead = 7,
+): Promise<AdminExpiringSubscription[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("admin_upcoming_expirations", {
+    days_ahead: daysAhead,
+  });
+  if (error || !Array.isArray(data)) return [];
+
+  return (data as Array<{
+    subscription_id: string;
+    user_id: string;
+    email: string;
+    current_period_end: string;
+    kind: "upcoming" | "expired";
+    days_left: number;
+  }>).map((row) => ({
+    subscriptionId: row.subscription_id,
+    userId: row.user_id,
+    email: row.email,
+    currentPeriodEnd: row.current_period_end,
+    kind: row.kind,
+    daysLeft: row.days_left,
+  }));
 }
 
 export async function listSettings(): Promise<AdminSettings[]> {

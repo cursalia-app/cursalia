@@ -73,6 +73,14 @@ const nextConfig: NextConfig = {
   // buscando el lockfile y avisa en cada arranque.
   turbopack: { root: path.resolve(process.cwd()) },
   poweredByHeader: false,
+  // Autoriza `next/image` a optimizar cualquier host de Bunny. Sin esto, en
+  // producción `<Image src="https://...b-cdn.net/...">` sería rechazado.
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "**.bunnycdn.com" },
+      { protocol: "https", hostname: "**.b-cdn.net" },
+    ],
+  },
   headers: async () => [
     {
       source: "/:path*",

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireCurrentUserId } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   changeStatus,
   deleteContent,
@@ -16,6 +17,7 @@ import {
   updateCommissionStatus,
 } from "@/lib/services/admin-content-service";
 import { createVideo } from "@/lib/services/video-service";
+import { generateCommissionForPayment } from "@/lib/services/affiliate-service";
 import { setSetting, type SettingKey } from "@/lib/services/settings-service";
 import {
   bookInputSchema,
@@ -220,6 +222,75 @@ export async function updateCommissionStatusAction(input: unknown): Promise<Admi
   try {
     await updateCommissionStatus(parsed.data.id, parsed.data.status, actorId);
     revalidatePath("/admin/comisiones");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Error inesperado" };
+  }
+}
+
+/* --- Cobro manual: extender y revocar accesos -------------------------- */
+
+const extendAccessSchema = z.object({
+  userId: z.string().uuid(),
+  months: z.number().int().min(1).max(24).default(1),
+  amountCents: z.number().int().min(0).max(10_000_00).nullish(),
+  note: z.string().trim().max(500).nullish(),
+});
+
+const revokeAccessSchema = z.object({
+  userId: z.string().uuid(),
+  reason: z.string().trim().max(500).nullish(),
+});
+
+/**
+ * Extiende el acceso del usuario `months` meses. Si el admin declara un
+ * importe, la RPC crea el pago; aquí generamos la comisión de afiliado
+ * (si aplica) por el mismo camino que un pago automático.
+ */
+export async function extendAccessAction(input: unknown): Promise<AdminResult> {
+  const parsed = extendAccessSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message };
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { data, error } = await supabase.rpc("admin_extend_access", {
+      target_user_id: parsed.data.userId,
+      months: parsed.data.months,
+      amount_cents: parsed.data.amountCents ?? null,
+      note: parsed.data.note ?? null,
+    });
+    if (error) return { ok: false, message: error.message };
+
+    const payload = (data ?? {}) as { payment_id?: string | null };
+    if (payload.payment_id) {
+      // La misma regla que en el webhook: si el usuario tiene referrer y no
+      // había comisión ya, se genera. Idempotente.
+      await generateCommissionForPayment(payload.payment_id).catch(() => {});
+    }
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/usuarios");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Error inesperado" };
+  }
+}
+
+/** Corta el acceso al instante. Las URLs firmadas ya emitidas caducan solas. */
+export async function revokeAccessAction(input: unknown): Promise<AdminResult> {
+  const parsed = revokeAccessSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message };
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { error } = await supabase.rpc("admin_revoke_access", {
+      target_user_id: parsed.data.userId,
+      reason: parsed.data.reason ?? null,
+    });
+    if (error) return { ok: false, message: error.message };
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/usuarios");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Error inesperado" };

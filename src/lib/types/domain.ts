@@ -147,6 +147,8 @@ export interface Subscription {
   status: SubscriptionStatus;
   currentPeriodEnd: string | null;
   pastDueSince: string | null;
+  /** Cierto solo si status='active' Y currentPeriodEnd está en el futuro. */
+  isActive: boolean;
 }
 
 export interface AffiliateReferral {
