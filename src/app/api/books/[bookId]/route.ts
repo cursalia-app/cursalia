@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { BookNotFoundError, getSignedBookUrl } from "@/lib/services/book-service";
 import { AccessDeniedError } from "@/lib/services/video-service";
+import { checkRateLimit, RateLimits } from "@/lib/services/rate-limit-service";
 import { clientIpFrom } from "@/lib/http/request";
 import { MissingConfigError } from "@/lib/env";
 
@@ -12,6 +13,15 @@ export async function GET(
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  const allowed = await checkRateLimit({
+    bucket: "signed:book",
+    actor: user.id,
+    ...RateLimits.signedBook,
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
   const { bookId } = await params;

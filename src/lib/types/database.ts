@@ -176,6 +176,12 @@ export type WebhookEventRow = {
   created_at: string;
 }
 
+export type RateLimitEventRow = {
+  bucket: string;
+  actor: string;
+  created_at: string;
+}
+
 /** Los campos con valor por defecto en SQL son opcionales al insertar. */
 type Table<Row, Insert = Partial<Row>, Update = Partial<Row>> = {
   Row: Row;
@@ -241,6 +247,10 @@ export type Database = {
         WebhookEventRow,
         Pick<WebhookEventRow, "external_event_id" | "payload"> & Partial<WebhookEventRow>
       >;
+      rate_limit_events: Table<
+        RateLimitEventRow,
+        Pick<RateLimitEventRow, "bucket" | "actor"> & Partial<RateLimitEventRow>
+      >;
     };
     Views: { [_ in never]: never };
     Functions: {
@@ -255,6 +265,10 @@ export type Database = {
       set_content_status: {
         Args: { entity: string; target_id: string; new_status: string };
         Returns: undefined;
+      };
+      check_rate_limit: {
+        Args: { bucket: string; actor: string; max_events: number; window_seconds: number };
+        Returns: boolean;
       };
     };
     Enums: { [_ in never]: never };

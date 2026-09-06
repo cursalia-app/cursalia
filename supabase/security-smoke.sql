@@ -111,4 +111,46 @@ begin
   end if;
 end $$;
 
-select 'OK: guards, RLS, policies e índices verificados' as resultado;
+-- 7) Rate limiting existe y no está expuesto a anon/authenticated.
+do $$
+begin
+  if not exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname='public' and p.proname='check_rate_limit'
+  ) then
+    raise exception 'falta la función check_rate_limit';
+  end if;
+
+  if exists (
+    select 1 from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname='public' and p.proname='check_rate_limit'
+      and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+  ) then
+    raise exception 'check_rate_limit expuesta a authenticated';
+  end if;
+
+  if not exists (
+    select 1 from pg_indexes where schemaname='public' and indexname='rate_limit_events_lookup'
+  ) then
+    raise exception 'falta el índice rate_limit_events_lookup';
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='rate_limit_events' and policyname='rate_limit_events_deny_all'
+  ) then
+    raise exception 'falta la policy rate_limit_events_deny_all';
+  end if;
+end $$;
+
+-- 8) Setting del cooldown de trial por IP presente.
+do $$
+begin
+  if not exists (select 1 from public.app_settings where key='trial_ip_cooldown_hours') then
+    raise exception 'falta app_settings.trial_ip_cooldown_hours';
+  end if;
+end $$;
+
+select 'OK: guards, RLS, policies, índices, rate limit y trial guard verificados' as resultado;

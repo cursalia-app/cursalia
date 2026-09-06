@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 
 /**
@@ -13,6 +14,20 @@ export function clientIpFrom(request: NextRequest): string | null {
   }
 
   return request.headers.get("x-real-ip");
+}
+
+/**
+ * Igual que `clientIpFrom`, pero pensado para server actions, donde no hay
+ * NextRequest a mano y se accede a las cabeceras vía la API de Next.
+ */
+export async function serverActionClientIp(): Promise<string | null> {
+  const h = await headers();
+  const forwarded = h.get("x-forwarded-for");
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return h.get("x-real-ip");
 }
 
 /**

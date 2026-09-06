@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { AccessDeniedError, VideoNotFoundError, getSignedVideoUrl } from "@/lib/services/video-service";
+import { checkRateLimit, RateLimits } from "@/lib/services/rate-limit-service";
 import { clientIpFrom } from "@/lib/http/request";
 import { MissingConfigError } from "@/lib/env";
 
@@ -15,6 +16,17 @@ export async function GET(
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  // Por usuario, no por IP: el mismo alumno pinchando capítulos con normalidad
+  // no debe verse frenado, pero un bot que pide 1000 URLs/minuto sí.
+  const allowed = await checkRateLimit({
+    bucket: "signed:video",
+    actor: user.id,
+    ...RateLimits.signedVideo,
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
   const { lessonId } = await params;

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/supabase/server";
 import { registerOrTouchDevice } from "@/lib/services/device-service";
+import { checkRateLimit, RateLimits } from "@/lib/services/rate-limit-service";
 
 const bodySchema = z.object({
   fingerprint: z.string().min(8).max(128),
@@ -12,6 +13,15 @@ export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  const allowed = await checkRateLimit({
+    bucket: "device:register",
+    actor: user.id,
+    ...RateLimits.deviceRegister,
+  });
+  if (!allowed) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
