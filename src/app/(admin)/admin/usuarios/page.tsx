@@ -38,13 +38,14 @@ export default async function AdminUsersPage({
       </form>
 
       <div className="overflow-x-auto rounded-[10px] border border-line">
-        <table className="w-full min-w-[680px] text-left text-sm">
+        <table className="w-full min-w-[820px] text-left text-sm">
           <thead>
             <tr className="border-b border-line bg-card text-[11px] uppercase tracking-wider text-subtle">
               <th className="px-4 py-3 font-medium">Correo</th>
               <th className="px-4 py-3 font-medium">Alta</th>
               <th className="px-4 py-3 font-medium">Suscripción</th>
               <th className="px-4 py-3 font-medium">Prueba</th>
+              <th className="px-4 py-3 font-medium">IP</th>
               <th className="px-4 py-3 text-right font-medium">Dispositivos</th>
             </tr>
           </thead>
@@ -71,8 +72,17 @@ export default async function AdminUsersPage({
                     <span className="text-[12px] text-subtle">Sin suscripción</span>
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  {user.trialStatus === "active" ? (
+                    <Badge tone="success">En curso</Badge>
+                  ) : user.trialStatus === "expired" ? (
+                    <Badge tone="neutral">Consumida</Badge>
+                  ) : (
+                    <span className="text-[12px] text-subtle">No iniciada</span>
+                  )}
+                </td>
                 <td className="num px-4 py-3 text-[12px] text-subtle">
-                  {user.trialStartedAt ? formatDate(user.trialStartedAt) : "No iniciada"}
+                  {user.signupIp ?? "—"}
                 </td>
                 <td className="num px-4 py-3 text-right text-[12px]">{user.deviceCount}</td>
               </tr>

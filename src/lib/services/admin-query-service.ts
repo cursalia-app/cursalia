@@ -73,9 +73,17 @@ export interface AdminUser {
   email: string;
   createdAt: string;
   trialStartedAt: string | null;
+  /**
+   * Estado calculado de la prueba: si empezó, si sigue activa, o si nunca
+   * arrancó (el trigger la puede bloquear por IP repetida, y en ese caso
+   * `trialStartedAt` queda a null).
+   */
+  trialStatus: "active" | "expired" | "never";
   isAdmin: boolean;
   subscriptionStatus: SubscriptionStatus | null;
   deviceCount: number;
+  /** IP desde la que se registró. Útil para investigar abusos de trial. */
+  signupIp: string | null;
 }
 
 export interface AdminCommission {
@@ -233,29 +241,40 @@ export async function listBooksForAdmin(): Promise<AdminBook[]> {
 
 /**
  * Listado de usuarios para soporte. Usa `service_role` porque un administrador
- * necesita ver suscripciones y dispositivos de terceros, y las policies de esas
- * tablas solo permiten leer lo propio.
+ * necesita ver suscripciones, dispositivos e IP de terceros, y las policies de
+ * esas columnas solo permiten leer lo propio.
+ *
+ * El estado de la prueba se deriva del ajuste `trial_duration_minutes` para no
+ * tener que replicar la fórmula en dos sitios: es la misma que usa
+ * `has_content_access` en SQL.
  */
 export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
   const supabase = createSupabaseAdminClient();
 
   let query = supabase
     .from("profiles")
-    .select("id, email, created_at, trial_started_at, is_admin")
+    .select("id, email, created_at, trial_started_at, is_admin, signup_ip")
     .order("created_at", { ascending: false })
     .limit(200);
 
   if (search) query = query.ilike("email", `%${search}%`);
 
   const { data: profiles, error } = await query.returns<
-    { id: string; email: string; created_at: string; trial_started_at: string | null; is_admin: boolean }[]
+    {
+      id: string;
+      email: string;
+      created_at: string;
+      trial_started_at: string | null;
+      is_admin: boolean;
+      signup_ip: string | null;
+    }[]
   >();
 
   if (error) throw new Error(`admin-query-service: ${error.message}`);
   const ids = (profiles ?? []).map((profile) => profile.id);
   if (ids.length === 0) return [];
 
-  const [{ data: subscriptions }, { data: devices }] = await Promise.all([
+  const [{ data: subscriptions }, { data: devices }, { data: setting }] = await Promise.all([
     supabase
       .from("subscriptions")
       .select("user_id, status, created_at")
@@ -267,6 +286,7 @@ export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
       .in("user_id", ids)
       .is("released_at", null)
       .returns<{ user_id: string; released_at: string | null }[]>(),
+    supabase.from("app_settings").select("value").eq("key", "trial_duration_minutes").maybeSingle(),
   ]);
 
   const statusByUser = new Map<string, SubscriptionStatus>();
@@ -279,15 +299,28 @@ export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
     devicesByUser.set(device.user_id, (devicesByUser.get(device.user_id) ?? 0) + 1);
   }
 
-  return (profiles ?? []).map((profile) => ({
-    id: profile.id,
-    email: profile.email,
-    createdAt: profile.created_at,
-    trialStartedAt: profile.trial_started_at,
-    isAdmin: profile.is_admin,
-    subscriptionStatus: statusByUser.get(profile.id) ?? null,
-    deviceCount: devicesByUser.get(profile.id) ?? 0,
-  }));
+  const trialMinutes = Number(setting?.value ?? 30);
+  const now = Date.now();
+
+  return (profiles ?? []).map((profile) => {
+    const trialStatus: AdminUser["trialStatus"] = !profile.trial_started_at
+      ? "never"
+      : new Date(profile.trial_started_at).getTime() + trialMinutes * 60_000 > now
+        ? "active"
+        : "expired";
+
+    return {
+      id: profile.id,
+      email: profile.email,
+      createdAt: profile.created_at,
+      trialStartedAt: profile.trial_started_at,
+      trialStatus,
+      isAdmin: profile.is_admin,
+      subscriptionStatus: statusByUser.get(profile.id) ?? null,
+      deviceCount: devicesByUser.get(profile.id) ?? 0,
+      signupIp: profile.signup_ip,
+    };
+  });
 }
 
 export async function listCommissionsForAdmin(): Promise<AdminCommission[]> {
