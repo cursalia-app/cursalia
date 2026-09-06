@@ -2,9 +2,16 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Check, ChevronDown, Play } from "lucide-react";
-import { cn, formatTimecode } from "@/lib/utils";
+import { Check, ChevronDown, Play, Search } from "lucide-react";
+import { cn, formatTimecode, normalizeSearch } from "@/lib/utils";
 import type { CourseTree as CourseTreeType } from "@/lib/types/domain";
+
+/**
+ * A partir de este número de capítulos aparece el buscador dentro del árbol.
+ * En cursos pequeños es ruido; en cursos gordos, localizar un capítulo
+ * concreto sin él es una lucha.
+ */
+const SEARCH_THRESHOLD = 8;
 
 /**
  * Índice del curso: Temas que agrupan Capítulos.
@@ -26,6 +33,33 @@ export function CourseTree({
   }, [tree.modules, activeLessonId]);
 
   const [open, setOpen] = React.useState<Set<number>>(() => new Set([activeModuleIndex]));
+  const [query, setQuery] = React.useState("");
+
+  const normalized = normalizeSearch(query);
+  const filtering = normalized.length > 0;
+  const showSearch = tree.lessonCount >= SEARCH_THRESHOLD;
+
+  // Los temas con al menos un capítulo que empate se conservan; el resto se
+  // ocultan. Cuando hay filtro, todos los temas visibles quedan expandidos
+  // para que el resultado sea inmediato, sin necesidad de otro clic.
+  const visibleModules = React.useMemo(() => {
+    if (!filtering) return tree.modules.map((module, index) => ({ module, index }));
+    return tree.modules
+      .map((module, index) => ({
+        module: {
+          ...module,
+          lessons: module.lessons.filter((lesson) =>
+            normalizeSearch(lesson.title).includes(normalized),
+          ),
+        },
+        index,
+      }))
+      .filter((entry) => entry.module.lessons.length > 0);
+  }, [tree.modules, filtering, normalized]);
+
+  const matchCount = filtering
+    ? visibleModules.reduce((acc, entry) => acc + entry.module.lessons.length, 0)
+    : 0;
 
   const toggle = (index: number) =>
     setOpen((prev) => {
@@ -36,16 +70,49 @@ export function CourseTree({
     });
 
   return (
-    <div className={cn("divide-y divide-line overflow-hidden rounded-[10px] border border-line", className)}>
-      {tree.modules.map((module, index) => {
-        const isOpen = open.has(index);
-        const done = module.lessons.filter((l) => l.progress?.completedAt).length;
+    <div className={cn("space-y-3", className)}>
+      {showSearch ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="relative w-full max-w-sm">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle"
+              strokeWidth={2}
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar un capítulo"
+              aria-label="Buscar un capítulo"
+              className="h-9 w-full rounded-lg border border-line bg-card pl-9 pr-3 text-sm placeholder:text-subtle focus:border-line-strong focus:outline-none"
+            />
+          </div>
+          {filtering ? (
+            <span className="num text-[11px] text-subtle">
+              {matchCount} {matchCount === 1 ? "capítulo" : "capítulos"}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="divide-y divide-line overflow-hidden rounded-[10px] border border-line">
+        {visibleModules.length === 0 ? (
+          <p className="px-4 py-8 text-center text-[13px] text-subtle">
+            Sin capítulos que coincidan con &ldquo;{query.trim()}&rdquo;.
+          </p>
+        ) : null}
+
+        {visibleModules.map(({ module, index }) => {
+          // Cuando el usuario filtra queremos ver todo lo que encaja de golpe.
+          const isOpen = filtering ? true : open.has(index);
+          const done = module.lessons.filter((l) => l.progress?.completedAt).length;
 
         return (
           <div key={module.id}>
             <button
               type="button"
-              onClick={() => toggle(index)}
+              onClick={() => (filtering ? undefined : toggle(index))}
               aria-expanded={isOpen}
               className="flex w-full items-center gap-3 bg-card px-4 py-3 text-left transition-colors hover:bg-elevated"
             >
@@ -104,6 +171,7 @@ export function CourseTree({
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
