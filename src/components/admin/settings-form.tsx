@@ -30,16 +30,20 @@ const LABELS: Record<string, { label: string; help: string; unit?: "cents" }> = 
   },
   grace_period_days: {
     label: "Días de cortesía",
-    help: "Días con acceso tras un impago antes de cortar.",
+    help: "Días con acceso tras marcar la cuenta como impagada, antes de cortar.",
   },
   device_release_cooldown_days: {
     label: "Espera entre liberaciones",
     help: "Días que deben pasar para poder liberar otro dispositivo.",
   },
   subscription_price_cents: {
-    label: "Precio de la suscripción",
-    help: "Solo se usa para mostrarlo. El cobro lo gestiona la pasarela.",
+    label: "Precio mensual",
+    help: "Solo se muestra en el paywall. El cobro es manual; se activa desde /admin/usuarios.",
     unit: "cents",
+  },
+  trial_ip_cooldown_hours: {
+    label: "Cooldown de trial por IP",
+    help: "Horas que deben pasar antes de que otra cuenta con la misma IP arranque su prueba.",
   },
 };
 

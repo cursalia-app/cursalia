@@ -167,6 +167,7 @@ const settingSchema = z.object({
     "grace_period_days",
     "device_release_cooldown_days",
     "subscription_price_cents",
+    "trial_ip_cooldown_hours",
   ]),
   value: z.number().int().min(0),
 });

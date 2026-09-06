@@ -46,7 +46,7 @@ export function TrialCountdown({ endsAt, className }: { endsAt: string; classNam
 
       <p className="mt-1.5 text-xs leading-relaxed text-muted">
         {expired
-          ? "Suscríbete para seguir donde lo dejaste. Tu progreso se conserva."
+          ? "Contáctanos para activar tu cuenta. Tu progreso se conserva."
           : "Acceso completo al catálogo mientras corre el reloj."}
       </p>
 
@@ -54,7 +54,7 @@ export function TrialCountdown({ endsAt, className }: { endsAt: string; classNam
         href="/cuenta"
         className="mt-3 inline-flex h-8 w-full items-center justify-center rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-white"
       >
-        Suscribirme
+        {expired ? "Solicitar acceso" : "Ver mi cuenta"}
       </Link>
     </div>
   );
@@ -65,13 +65,13 @@ export function AccessChip({ access }: { access: AccessState }) {
   const ms = useRemainingMs(access.kind === "trial" ? access.trialEndsAt : null);
 
   if (access.kind === "subscribed") {
-    return <span className="text-[11px] font-medium text-subtle">Suscripción activa</span>;
+    return <span className="text-[11px] font-medium text-subtle">Acceso activo</span>;
   }
 
   if (access.kind === "grace") {
     return (
       <span className="rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[11px] text-warn">
-        Pago pendiente
+        Pendiente de pago
       </span>
     );
   }
@@ -79,7 +79,7 @@ export function AccessChip({ access }: { access: AccessState }) {
   if (access.kind === "none") {
     return (
       <Link href="/cuenta" className="text-[11px] font-medium text-foreground underline underline-offset-4">
-        Suscribirme
+        Solicitar acceso
       </Link>
     );
   }

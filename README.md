@@ -57,32 +57,26 @@ pdf.js, y sin CORS el archivo se descarga pero no se puede pintar.
 
 ### 4. Pagos
 
-El cobro lo gestiona el equipo fuera de esta aplicación. Aquí solo se consumen
-eventos por webhook, firmados con HMAC-SHA256 sobre el cuerpo crudo usando
-`PAYMENTS_WEBHOOK_SECRET`, en la cabecera `x-cursalia-signature`.
+El cobro es **manual**: se gestiona por fuera de la aplicación (transferencia,
+Bizum, lo que se acuerde con cada cliente). Cursalia solo registra hasta qué
+fecha se ha pagado y quién lo tramitó.
 
-El endpoint es `POST /api/webhooks/payments` y espera este contrato, propio y
-neutro respecto al proveedor:
+**Flujo cotidiano:**
 
-```json
-{
-  "id": "evt_123",
-  "type": "payment.succeeded",
-  "occurred_at": "2026-09-03T12:00:00.000Z",
-  "customer": { "external_id": "cus_1", "email": "alumno@cursalia.com" },
-  "payment": {
-    "external_id": "pay_1",
-    "amount_cents": 4900,
-    "currency": "EUR",
-    "kind": "entry",
-    "paid_at": "2026-09-03T12:00:00.000Z"
-  }
-}
-```
+1. Cliente se registra y verifica el correo → arranca su prueba de 30 minutos.
+2. Cliente hace el pago por su vía.
+3. Vas a **Panel → Usuarios**, buscas por correo y pulsas **Extender**:
+   introduces los meses (por defecto 1) y opcionalmente el importe cobrado.
+   Si declaras importe, se registra el pago y, si el cliente vino por un
+   referido, se genera la comisión de afiliado.
+4. Cuando se acerca la fecha de fin, el **Panel → Vencimientos** te avisa.
+   Si el cliente no renueva, el acceso se corta solo al pasar la fecha; no
+   hay que hacer nada. Si prefieres cortar antes: botón **Cortar**.
 
-Tipos admitidos: `payment.succeeded`, `subscription.activated`,
-`subscription.past_due`, `subscription.canceled`, `subscription.expired`.
-Adaptar una pasarela concreta consiste en traducir su carga útil a este esquema.
+El webhook `POST /api/webhooks/payments` sigue existiendo por si en el
+futuro se enchufa una pasarela. Su especificación completa está en
+`src/lib/services/billing-service.ts`. Con `PAYMENTS_WEBHOOK_SECRET` sin
+configurar, el endpoint responde 503 y no acepta eventos.
 
 ## Cargar contenido
 
@@ -100,6 +94,29 @@ node scripts/drive-to-bunny/index.mjs "D:/Drive/Mi curso" > curso.json
 Cada subcarpeta se convierte en un Tema y cada vídeo en un Capítulo. El JSON
 resultante se pega en **Panel → Importar**: el curso aparece completo y en
 borrador, listo para revisar antes de publicar.
+
+## Gestión desde el panel
+
+- **Usuarios**: extender o cortar accesos, promover a admin, cerrar cuentas
+  (baja RGPD que anonimiza correo e IP conservando el histórico de pagos).
+  Un admin no puede cerrar su propia cuenta ni quitarse el rol a sí mismo.
+- **Vencimientos**: dashboard con quién caduca en los próximos días y quién
+  ya caducó; clic lleva al usuario en el listado con las acciones a mano.
+- **Ajustes**: duración de la prueba, cooldown de trial por IP, precio de la
+  suscripción, comisión de afiliado, días de cortesía, límite de dispositivos.
+- **Comisiones**: repasar y marcar como pagadas.
+
+Todo cambio importante queda en `audit_log`, con el hash del correo previo
+en las bajas para poder correlacionar sin exponer PII.
+
+## Verificación
+
+```bash
+psql "$DATABASE_URL" -f supabase/security-smoke.sql
+```
+
+Comprueba que los guards, RLS, policies, índices y RPCs siguen bien tras
+cualquier migración. Silencio = todo correcto.
 
 ## Comandos
 

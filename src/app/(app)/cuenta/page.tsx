@@ -77,8 +77,8 @@ export default async function AccountPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Acceso</CardTitle>
-          <CardDescription>Correo y contraseña de entrada a Cursalia.</CardDescription>
+          <CardTitle>Correo y contraseña</CardTitle>
+          <CardDescription>Datos de entrada a Cursalia.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">

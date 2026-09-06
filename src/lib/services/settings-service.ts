@@ -15,6 +15,7 @@ export const SETTING_DEFAULTS = {
   grace_period_days: 3,
   device_release_cooldown_days: 30,
   subscription_price_cents: 2900,
+  trial_ip_cooldown_hours: 24,
 } as const;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;
