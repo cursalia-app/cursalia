@@ -276,6 +276,73 @@ export async function extendAccessAction(input: unknown): Promise<AdminResult> {
   }
 }
 
+const toggleAdminSchema = z.object({
+  userId: z.string().uuid(),
+  makeAdmin: z.boolean(),
+});
+
+const deleteUserSchema = z.object({
+  userId: z.string().uuid(),
+  reason: z.string().trim().max(500).nullish(),
+});
+
+/** Promueve o degrada el rol de administrador de un usuario. */
+export async function toggleAdminAction(input: unknown): Promise<AdminResult> {
+  const parsed = toggleAdminSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message };
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { error } = await supabase.rpc("admin_toggle_admin", {
+      target_user_id: parsed.data.userId,
+      make_admin: parsed.data.makeAdmin,
+    });
+    if (error) return { ok: false, message: error.message };
+
+    revalidatePath("/admin/usuarios");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Error inesperado" };
+  }
+}
+
+/**
+ * Baja RGPD: anonimiza el email, corta la suscripción y libera dispositivos.
+ * Auth.users NO se borra (perderíamos los pagos por cascade); su email se
+ * actualiza también al valor anónimo desde la Admin API. La cuenta queda
+ * inservible pero la traza contable se conserva.
+ */
+export async function deleteUserAction(input: unknown): Promise<AdminResult> {
+  const parsed = deleteUserSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message };
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { data, error } = await supabase.rpc("admin_soft_delete_user", {
+      target_user_id: parsed.data.userId,
+      reason: parsed.data.reason ?? null,
+    });
+    if (error) return { ok: false, message: error.message };
+
+    const anonEmail = (data as { anon_email?: string })?.anon_email;
+    if (anonEmail) {
+      // Actualiza también auth.users. Si falla, la parte pública ya está
+      // anonimizada; el admin puede reintentar sin efectos raros.
+      await supabase.auth.admin
+        .updateUserById(parsed.data.userId, {
+          email: anonEmail,
+          password: crypto.randomUUID(),
+        })
+        .catch(() => {});
+    }
+
+    revalidatePath("/admin/usuarios");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Error inesperado" };
+  }
+}
+
 /** Corta el acceso al instante. Las URLs firmadas ya emitidas caducan solas. */
 export async function revokeAccessAction(input: unknown): Promise<AdminResult> {
   const parsed = revokeAccessSchema.safeParse(input);

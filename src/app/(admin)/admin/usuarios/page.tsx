@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/primitives";
 import { AccessActions } from "@/components/admin/access-actions";
 import { listUsersForAdmin } from "@/lib/services/admin-query-service";
+import { getCurrentProfile } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Usuarios" };
@@ -13,7 +14,8 @@ export default async function AdminUsersPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q } = await searchParams;
-  const users = await listUsersForAdmin(q);
+  const [users, profile] = await Promise.all([listUsersForAdmin(q), getCurrentProfile()]);
+  const currentUserId = profile?.id ?? null;
 
   return (
     <div className="space-y-6">
@@ -88,6 +90,9 @@ export default async function AdminUsersPage({
                     <AccessActions
                       userId={user.id}
                       hasSubscription={user.subscriptionStatus !== null}
+                      isAdmin={user.isAdmin}
+                      isSelf={user.id === currentUserId}
+                      isDeleted={user.deletedAt !== null}
                     />
                   </div>
                 </td>

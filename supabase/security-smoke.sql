@@ -196,12 +196,19 @@ begin
   end if;
 end $$;
 
--- 12) RPCs de cobro manual expuestas a authenticated con guard is_admin() dentro.
+-- 12) RPCs de admin (cobro y gestión de usuarios) expuestas a authenticated
+--     con guard is_admin() dentro y cerradas a anon.
 do $$
 declare
   fn text;
 begin
-  foreach fn in array array['admin_extend_access', 'admin_revoke_access', 'admin_upcoming_expirations']
+  foreach fn in array array[
+    'admin_extend_access',
+    'admin_revoke_access',
+    'admin_upcoming_expirations',
+    'admin_toggle_admin',
+    'admin_soft_delete_user'
+  ]
   loop
     if not exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -216,4 +223,4 @@ begin
   end loop;
 end $$;
 
-select 'OK: seguridad completa (guards, RLS, policies, índices, rate limit, trial guard, búsqueda, métricas y cobro manual)' as resultado;
+select 'OK: seguridad completa (guards, RLS, policies, índices, rate limit, trial guard, búsqueda, métricas, cobro manual y gestión de usuarios)' as resultado;

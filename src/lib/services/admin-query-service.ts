@@ -88,6 +88,8 @@ export interface AdminUser {
   deviceCount: number;
   /** IP desde la que se registró. Útil para investigar abusos de trial. */
   signupIp: string | null;
+  /** Marca de baja RGPD. Si no es null, el correo ya está anonimizado. */
+  deletedAt: string | null;
 }
 
 export interface AdminCommission {
@@ -257,7 +259,7 @@ export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
 
   let query = supabase
     .from("profiles")
-    .select("id, email, created_at, trial_started_at, is_admin, signup_ip")
+    .select("id, email, created_at, trial_started_at, is_admin, signup_ip, deleted_at")
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -271,6 +273,7 @@ export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
       trial_started_at: string | null;
       is_admin: boolean;
       signup_ip: string | null;
+      deleted_at: string | null;
     }[]
   >();
 
@@ -347,6 +350,7 @@ export async function listUsersForAdmin(search?: string): Promise<AdminUser[]> {
       isAccessExpired,
       deviceCount: devicesByUser.get(profile.id) ?? 0,
       signupIp: profile.signup_ip,
+      deletedAt: profile.deleted_at,
     };
   });
 }

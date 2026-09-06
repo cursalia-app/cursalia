@@ -295,6 +295,14 @@ export type Database = {
         Args: { days_ahead?: number };
         Returns: unknown;
       };
+      admin_toggle_admin: {
+        Args: { target_user_id: string; make_admin: boolean };
+        Returns: undefined;
+      };
+      admin_soft_delete_user: {
+        Args: { target_user_id: string; reason?: string | null };
+        Returns: unknown;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

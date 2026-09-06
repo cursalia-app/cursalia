@@ -1453,7 +1453,86 @@ $$;
 revoke execute on function public.admin_upcoming_expirations(integer) from public, anon;
 grant execute on function public.admin_upcoming_expirations(integer) to authenticated;
 
--- ---------- 8. CATEGORÍAS DE EJEMPLO ----------
+-- ---------- 8. GESTIÓN DE USUARIOS DESDE EL PANEL ----------
+
+create or replace function public.admin_toggle_admin(
+  target_user_id uuid, make_admin boolean
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then raise exception 'forbidden' using errcode = 'insufficient_privilege'; end if;
+  if make_admin is false and target_user_id = auth.uid() then
+    raise exception 'cannot_demote_self' using errcode = 'check_violation';
+  end if;
+
+  update public.profiles set is_admin = make_admin
+    where id = target_user_id and deleted_at is null;
+  if not found then raise exception 'user_not_found' using errcode = 'no_data_found'; end if;
+
+  insert into public.audit_log (actor_id, action, entity_type, entity_id, diff)
+  values (auth.uid(),
+          case when make_admin then 'admin_granted' else 'admin_revoked' end,
+          'profile', target_user_id, jsonb_build_object('is_admin', make_admin));
+end;
+$$;
+
+revoke execute on function public.admin_toggle_admin(uuid, boolean) from public, anon;
+grant execute on function public.admin_toggle_admin(uuid, boolean) to authenticated;
+
+-- Baja RGPD: anonimización sin cascade delete, para preservar contabilidad.
+create or replace function public.admin_soft_delete_user(
+  target_user_id uuid, reason text default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  anon_email     text;
+  existing_email text;
+begin
+  if not public.is_admin() then raise exception 'forbidden' using errcode = 'insufficient_privilege'; end if;
+  if target_user_id = auth.uid() then raise exception 'cannot_delete_self' using errcode = 'check_violation'; end if;
+
+  select email into existing_email from public.profiles
+   where id = target_user_id and deleted_at is null;
+  if existing_email is null then raise exception 'user_not_found' using errcode = 'no_data_found'; end if;
+
+  anon_email := 'deleted-' || target_user_id::text || '@cursalia.local';
+
+  update public.profiles
+     set email = anon_email, deleted_at = now(),
+         trial_started_at = null, signup_ip = null,
+         is_admin = false, external_customer_id = null, referred_by = null
+   where id = target_user_id;
+
+  update public.subscriptions
+     set status = 'canceled', canceled_at = now(),
+         current_period_end = least(current_period_end, now())
+   where user_id = target_user_id and status = 'active';
+
+  update public.user_devices
+     set released_at = now()
+   where user_id = target_user_id and released_at is null;
+
+  insert into public.audit_log (actor_id, action, entity_type, entity_id, diff)
+  values (auth.uid(), 'user_deleted', 'profile', target_user_id,
+          jsonb_build_object(
+            'reason', reason,
+            'previous_email_hash', encode(digest(existing_email, 'sha256'), 'hex')
+          ));
+
+  return jsonb_build_object('user_id', target_user_id, 'anon_email', anon_email);
+end;
+$$;
+
+revoke execute on function public.admin_soft_delete_user(uuid, text) from public, anon;
+grant execute on function public.admin_soft_delete_user(uuid, text) to authenticated;
+
+-- ---------- 9. CATEGORÍAS DE EJEMPLO ----------
 
 -- Datos mínimos para arrancar en local.
 -- No crea usuarios: eso lo hace Supabase Auth al registrarse desde /registro.

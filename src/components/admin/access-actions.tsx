@@ -2,42 +2,57 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { extendAccessAction, revokeAccessAction } from "@/lib/actions/admin-actions";
+import {
+  deleteUserAction,
+  extendAccessAction,
+  revokeAccessAction,
+  toggleAdminAction,
+} from "@/lib/actions/admin-actions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Botones inline para el listado de usuarios. Abren un diálogo compacto
- * (sin librería) donde el admin declara meses e importe opcional. La
- * confirmación de "cortar acceso" también pasa por diálogo para no
- * disparar la acción con un clic accidental.
+ * Acciones inline por fila en el listado de usuarios: extender el acceso,
+ * cortarlo, promover o degradar el rol de admin, y baja RGPD. La baja pide
+ * doble confirmación (diálogo + texto) porque no es reversible.
+ *
+ * El usuario NO puede aplicar ninguna acción sobre sí mismo aparte de
+ * extender: la RPC lo rechaza, y ocultarlas también aquí evita el 400.
  */
 export function AccessActions({
   userId,
   hasSubscription,
+  isAdmin,
+  isSelf,
+  isDeleted,
 }: {
   userId: string;
   hasSubscription: boolean;
+  isAdmin: boolean;
+  isSelf: boolean;
+  isDeleted: boolean;
 }) {
-  const [mode, setMode] = useState<"idle" | "extend" | "revoke">("idle");
+  const [mode, setMode] = useState<"idle" | "extend" | "revoke" | "delete">("idle");
+
+  if (isDeleted) {
+    return <span className="text-[11px] italic text-subtle">Cuenta cerrada</span>;
+  }
 
   return (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => setMode("extend")}
-        className="rounded-md border border-line px-2 py-1 text-[11px] text-muted transition-colors hover:border-line-strong hover:text-foreground"
-      >
-        Extender
-      </button>
+    <div className="flex flex-wrap items-center justify-end gap-1.5">
+      <ActionButton onClick={() => setMode("extend")}>Extender</ActionButton>
       {hasSubscription ? (
-        <button
-          type="button"
-          onClick={() => setMode("revoke")}
-          className="rounded-md border border-line px-2 py-1 text-[11px] text-danger transition-colors hover:border-danger/60"
-        >
+        <ActionButton tone="danger" onClick={() => setMode("revoke")}>
           Cortar
-        </button>
+        </ActionButton>
+      ) : null}
+      {!isSelf ? (
+        <AdminToggleButton userId={userId} isAdmin={isAdmin} />
+      ) : null}
+      {!isSelf ? (
+        <ActionButton tone="danger" onClick={() => setMode("delete")}>
+          Borrar
+        </ActionButton>
       ) : null}
 
       {mode === "extend" ? (
@@ -46,7 +61,69 @@ export function AccessActions({
       {mode === "revoke" ? (
         <RevokeDialog userId={userId} onClose={() => setMode("idle")} />
       ) : null}
+      {mode === "delete" ? (
+        <DeleteDialog userId={userId} onClose={() => setMode("idle")} />
+      ) : null}
     </div>
+  );
+}
+
+function ActionButton({
+  onClick,
+  children,
+  tone = "neutral",
+  disabled,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+  tone?: "neutral" | "danger";
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "rounded-md border px-2 py-1 text-[11px] transition-colors disabled:opacity-40",
+        tone === "danger"
+          ? "border-line text-danger hover:border-danger/60"
+          : "border-line text-muted hover:border-line-strong hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Toggle inline sin diálogo. Es un cambio reversible y no destructivo:
+ * el confirm nativo del navegador es suficiente para evitar clics accidentales.
+ */
+function AdminToggleButton({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  const submit = () => {
+    const message = isAdmin
+      ? "¿Quitar el rol de administrador?"
+      : "¿Dar rol de administrador?";
+    if (!window.confirm(message)) return;
+
+    startTransition(async () => {
+      const result = await toggleAdminAction({ userId, makeAdmin: !isAdmin });
+      if (!result.ok) {
+        window.alert(result.message ?? "No se pudo cambiar");
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  return (
+    <ActionButton onClick={submit} disabled={pending}>
+      {isAdmin ? "Quitar admin" : "Hacer admin"}
+    </ActionButton>
   );
 }
 
@@ -63,7 +140,6 @@ function ExtendDialog({ userId, onClose }: { userId: string; onClose: () => void
     const cents = amountEuros.trim()
       ? Math.round(Number(amountEuros.replace(",", ".")) * 100)
       : null;
-
     if (cents !== null && (!Number.isFinite(cents) || cents < 0)) {
       setError("Importe no válido");
       return;
@@ -117,9 +193,7 @@ function ExtendDialog({ userId, onClose }: { userId: string; onClose: () => void
           className={inputClass}
         />
       </Field>
-
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
-
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={pending}>
           Cancelar
@@ -167,15 +241,81 @@ function RevokeDialog({ userId, onClose }: { userId: string; onClose: () => void
           className={inputClass}
         />
       </Field>
-
       {error ? <p className="text-[12px] text-danger">{error}</p> : null}
-
       <div className="flex justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={pending}>
           Cancelar
         </Button>
         <Button type="button" variant="danger" size="sm" onClick={submit} disabled={pending}>
           {pending ? "Cortando…" : "Cortar acceso"}
+        </Button>
+      </div>
+    </DialogShell>
+  );
+}
+
+/**
+ * Baja RGPD. Pedimos escribir la palabra "BORRAR" para evitar clics
+ * accidentales; el correo, el trial y la IP se anonimizan; el histórico
+ * de pagos y auditoría se mantiene, ahora referido a un perfil borrado.
+ */
+function DeleteDialog({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [reason, setReason] = useState<string>("");
+  const [confirmation, setConfirmation] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = () => {
+    setError(null);
+    if (confirmation.trim().toUpperCase() !== "BORRAR") {
+      setError("Escribe BORRAR para confirmar.");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await deleteUserAction({ userId, reason: reason.trim() || null });
+      if (!result.ok) {
+        setError(result.message ?? "No se pudo borrar");
+        return;
+      }
+      router.refresh();
+      onClose();
+    });
+  };
+
+  return (
+    <DialogShell title="Cerrar la cuenta del usuario" onClose={onClose}>
+      <p className="text-[13px] text-muted">
+        Se anonimiza el correo y la IP, se corta la suscripción y se liberan los dispositivos.
+        El histórico de pagos y auditoría se mantiene por trazabilidad contable. No es reversible.
+      </p>
+      <Field label="Motivo (queda en el audit)">
+        <input
+          type="text"
+          maxLength={500}
+          placeholder="Ej.: solicitud RGPD del titular"
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          className={inputClass}
+        />
+      </Field>
+      <Field label='Escribe "BORRAR" para confirmar'>
+        <input
+          type="text"
+          autoComplete="off"
+          value={confirmation}
+          onChange={(event) => setConfirmation(event.target.value)}
+          className={inputClass}
+        />
+      </Field>
+      {error ? <p className="text-[12px] text-danger">{error}</p> : null}
+      <div className="flex justify-end gap-2 pt-1">
+        <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={pending}>
+          Cancelar
+        </Button>
+        <Button type="button" variant="danger" size="sm" onClick={submit} disabled={pending}>
+          {pending ? "Borrando…" : "Cerrar cuenta"}
         </Button>
       </div>
     </DialogShell>
@@ -215,9 +355,7 @@ function DialogShell({
       <div
         role="dialog"
         aria-modal="true"
-        className={cn(
-          "w-full max-w-md space-y-4 rounded-[12px] border border-line bg-surface p-6 shadow-xl",
-        )}
+        className="w-full max-w-md space-y-4 rounded-[12px] border border-line bg-surface p-6 shadow-xl"
       >
         <h3 className="text-base font-medium tracking-[-0.01em]">{title}</h3>
         {children}

@@ -26,6 +26,9 @@ const ACTION_LABELS: Record<string, string> = {
   trial_blocked_ip_reuse: "Trial bloqueado (IP repetida)",
   access_extended: "Acceso extendido",
   access_revoked: "Acceso cortado",
+  admin_granted: "Rol admin concedido",
+  admin_revoked: "Rol admin retirado",
+  user_deleted: "Cuenta cerrada",
 };
 
 const ENTITY_LABELS: Record<string, string> = {
