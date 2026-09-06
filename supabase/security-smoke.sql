@@ -153,4 +153,32 @@ begin
   end if;
 end $$;
 
-select 'OK: guards, RLS, policies, índices, rate limit y trial guard verificados' as resultado;
+-- 9) Búsqueda global expuesta a authenticated Y anon (respeta RLS).
+do $$
+begin
+  if not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname='public' and p.proname='search_catalog'
+      and has_function_privilege('anon', p.oid, 'EXECUTE')
+      and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+  ) then raise exception 'search_catalog no accesible como se espera'; end if;
+end $$;
+
+-- 10) Métricas del panel: expuesta a authenticated, cerradas a anon.
+--     El guard interno is_admin() decide si contesta o rechaza.
+do $$
+begin
+  if exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname='public' and p.proname='admin_metrics'
+      and has_function_privilege('anon', p.oid, 'EXECUTE')
+  ) then raise exception 'admin_metrics accesible por anon'; end if;
+
+  if not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname='public' and p.proname='admin_metrics'
+      and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+  ) then raise exception 'admin_metrics no accesible por authenticated'; end if;
+end $$;
+
+select 'OK: guards, RLS, policies, índices, rate limit, trial guard, búsqueda y métricas verificados' as resultado;
