@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { BookOpen, GraduationCap, Home, Share2, UserRound } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { TrialCountdown, AccessChip } from "@/components/access/trial-countdown";
+import { GlobalSearch } from "@/components/layout/global-search";
 import { cn } from "@/lib/utils";
 import type { AccessState, Profile } from "@/lib/types/domain";
 
@@ -29,6 +30,10 @@ export function Sidebar({ profile, access }: { profile: Profile; access: AccessS
         <Link href="/" aria-label="Cursalia, ir al inicio">
           <Logo />
         </Link>
+      </div>
+
+      <div className="px-3 pb-2">
+        <GlobalSearch />
       </div>
 
       <nav className="flex-1 space-y-0.5 px-3 py-2">

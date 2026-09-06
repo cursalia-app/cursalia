@@ -270,6 +270,10 @@ export type Database = {
         Args: { bucket: string; actor: string; max_events: number; window_seconds: number };
         Returns: boolean;
       };
+      search_catalog: {
+        Args: { query: string; max_results?: number };
+        Returns: unknown;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
