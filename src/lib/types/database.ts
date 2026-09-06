@@ -274,6 +274,10 @@ export type Database = {
         Args: { query: string; max_results?: number };
         Returns: unknown;
       };
+      admin_metrics: {
+        Args: Record<string, never>;
+        Returns: unknown;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

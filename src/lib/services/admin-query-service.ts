@@ -334,6 +334,50 @@ export async function listCommissionsForAdmin(): Promise<AdminCommission[]> {
   }));
 }
 
+export interface AdminMetrics {
+  totalUsers: number;
+  activeSubscriptions: number;
+  onTrial: number;
+  signupsLast30Days: number;
+  revenueLast30DaysCents: number;
+  paymentsLast30Days: number;
+  topCourses: { id: string; slug: string; title: string; learners: number }[];
+  topBooks: { id: string; slug: string; title: string; readers: number }[];
+}
+
+const EMPTY_METRICS: AdminMetrics = {
+  totalUsers: 0,
+  activeSubscriptions: 0,
+  onTrial: 0,
+  signupsLast30Days: 0,
+  revenueLast30DaysCents: 0,
+  paymentsLast30Days: 0,
+  topCourses: [],
+  topBooks: [],
+};
+
+/**
+ * Métricas del panel resueltas en una sola RPC. La función SQL comprueba
+ * `is_admin` antes de contar nada: aquí solo interpretamos el JSON.
+ */
+export async function getAdminMetrics(): Promise<AdminMetrics> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("admin_metrics");
+  if (error || !data || typeof data !== "object") return EMPTY_METRICS;
+
+  const payload = data as Partial<AdminMetrics>;
+  return {
+    totalUsers: Number(payload.totalUsers ?? 0),
+    activeSubscriptions: Number(payload.activeSubscriptions ?? 0),
+    onTrial: Number(payload.onTrial ?? 0),
+    signupsLast30Days: Number(payload.signupsLast30Days ?? 0),
+    revenueLast30DaysCents: Number(payload.revenueLast30DaysCents ?? 0),
+    paymentsLast30Days: Number(payload.paymentsLast30Days ?? 0),
+    topCourses: Array.isArray(payload.topCourses) ? payload.topCourses : [],
+    topBooks: Array.isArray(payload.topBooks) ? payload.topBooks : [],
+  };
+}
+
 export interface AdminSettings {
   key: string;
   value: number;
