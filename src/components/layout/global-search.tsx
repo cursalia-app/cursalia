@@ -1,10 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { BookOpen, GraduationCap, Loader2, Search } from "lucide-react";
+import { BookOpen, GraduationCap, Loader2, Search, X } from "lucide-react";
 import { searchCatalogAction } from "@/lib/actions/search-actions";
 import type { SearchResults } from "@/lib/services/search-service";
 import { cn } from "@/lib/utils";
@@ -14,25 +22,17 @@ const DEBOUNCE_MS = 220;
 const MIN_CHARS = 2;
 
 /**
- * Búsqueda global de la barra lateral. Al escribir se dispara con debounce
- * corto la server action, que respeta RLS y aplica rate limit por usuario.
- * Los resultados aparecen en un dropdown flotante bajo el input. La navegación
- * (Link) cierra el panel al cambiar de ruta.
+ * Hook con el estado de la búsqueda: texto, resultados del último batch, y si
+ * hay una consulta en vuelo. La derivación de resultados evita setear estado
+ * desde efectos, cumpliendo la nueva regla estricta de React 19.
  */
-export function GlobalSearch({ className }: { className?: string }) {
-  const id = useId();
-  const router = useRouter();
+function useCatalogSearch() {
   const [query, setQuery] = useState("");
-  // Guardamos el query bajo el que llegaron los últimos resultados: así, cuando
-  // el usuario borra hasta bajar del mínimo, no hace falta setear estado desde
-  // el effect (React 19 lo prohíbe): derivamos EMPTY comparando ambos valores.
   const [lastResult, setLastResult] = useState<{ query: string; data: SearchResults }>({
     query: "",
     data: EMPTY,
   });
-  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const runSearch = useCallback((value: string) => {
     startTransition(async () => {
@@ -49,12 +49,97 @@ export function GlobalSearch({ className }: { className?: string }) {
   }, [query, runSearch]);
 
   const trimmedQuery = query.trim();
-  const results =
-    trimmedQuery.length >= MIN_CHARS && lastResult.query === trimmedQuery
-      ? lastResult.data
-      : EMPTY;
+  const results = useMemo(
+    () =>
+      trimmedQuery.length >= MIN_CHARS && lastResult.query === trimmedQuery
+        ? lastResult.data
+        : EMPTY,
+    [trimmedQuery, lastResult],
+  );
 
-  // Cierre al hacer clic fuera o pulsar ESC.
+  return { query, setQuery, trimmedQuery, results, pending, showResults: trimmedQuery.length >= MIN_CHARS };
+}
+
+/** Panel de resultados común a la sidebar y al modal móvil. */
+function ResultsPanel({
+  results,
+  pending,
+  trimmedQuery,
+  onNavigate,
+  className,
+}: {
+  results: SearchResults;
+  pending: boolean;
+  trimmedQuery: string;
+  onNavigate: () => void;
+  className?: string;
+}) {
+  const hasResults = results.courses.length > 0 || results.books.length > 0;
+  const router = useRouter();
+
+  return (
+    <div role="listbox" className={cn("overflow-y-auto", className)}>
+      {!hasResults && !pending ? (
+        <p className="px-4 py-6 text-center text-[13px] text-subtle">
+          Sin coincidencias para &ldquo;{trimmedQuery}&rdquo;
+        </p>
+      ) : null}
+
+      {results.courses.length > 0 ? (
+        <ResultSection title="Cursos">
+          {results.courses.map((course) => (
+            <ResultRow
+              key={course.id}
+              href={`/cursos/${course.slug}`}
+              cover={course.cover_url}
+              seed={course.slug}
+              title={course.title}
+              subtitle={course.category_name}
+              icon={<GraduationCap className="size-3.5" strokeWidth={1.75} />}
+              onNavigate={() => {
+                onNavigate();
+                router.push(`/cursos/${course.slug}`);
+              }}
+            />
+          ))}
+        </ResultSection>
+      ) : null}
+
+      {results.books.length > 0 ? (
+        <ResultSection title="Libros">
+          {results.books.map((book) => (
+            <ResultRow
+              key={book.id}
+              href={`/libros/${book.slug}`}
+              cover={book.cover_url}
+              seed={book.slug}
+              title={book.title}
+              subtitle={book.author ?? "Autor desconocido"}
+              icon={<BookOpen className="size-3.5" strokeWidth={1.75} />}
+              onNavigate={() => {
+                onNavigate();
+                router.push(`/libros/${book.slug}`);
+              }}
+            />
+          ))}
+        </ResultSection>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Búsqueda global de la barra lateral (versión desktop).
+ * Con la tecla "/" enfocamos el input, siempre que el usuario no esté
+ * escribiendo en otro campo — así el atajo no interfiere con formularios.
+ */
+export function GlobalSearch({ className }: { className?: string }) {
+  const id = useId();
+  const { query, setQuery, trimmedQuery, results, pending, showResults } = useCatalogSearch();
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
@@ -71,8 +156,24 @@ export function GlobalSearch({ className }: { className?: string }) {
     };
   }, [open]);
 
-  const showPanel = open && trimmedQuery.length >= MIN_CHARS;
-  const hasResults = results.courses.length > 0 || results.books.length > 0;
+  // Atajo global "/" para enfocar el input, salvo que el foco ya esté en un
+  // campo de texto o en un contenteditable.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "/") return;
+      const target = event.target as HTMLElement | null;
+      const isTyping =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+      if (isTyping) return;
+      event.preventDefault();
+      inputRef.current?.focus();
+      setOpen(true);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
@@ -86,6 +187,7 @@ export function GlobalSearch({ className }: { className?: string }) {
       />
       <input
         id={id}
+        ref={inputRef}
         type="search"
         value={query}
         onChange={(event) => {
@@ -93,7 +195,7 @@ export function GlobalSearch({ className }: { className?: string }) {
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        placeholder="Buscar cursos y libros"
+        placeholder="Buscar (pulsa /)"
         autoComplete="off"
         spellCheck={false}
         className="h-9 w-full rounded-lg border border-line bg-card pl-9 pr-8 text-sm text-foreground placeholder:text-subtle focus:border-line-strong focus:outline-none"
@@ -105,59 +207,113 @@ export function GlobalSearch({ className }: { className?: string }) {
         />
       ) : null}
 
-      {showPanel ? (
-        <div
-          role="listbox"
-          className="absolute left-0 right-0 top-full z-40 mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-line bg-surface shadow-xl"
-        >
-          {!hasResults && !pending ? (
-            <p className="px-4 py-6 text-center text-[13px] text-subtle">
-              Sin coincidencias para &ldquo;{trimmedQuery}&rdquo;
-            </p>
-          ) : null}
-
-          {results.courses.length > 0 ? (
-            <ResultSection title="Cursos">
-              {results.courses.map((course) => (
-                <ResultRow
-                  key={course.id}
-                  href={`/cursos/${course.slug}`}
-                  cover={course.cover_url}
-                  seed={course.slug}
-                  title={course.title}
-                  subtitle={course.category_name}
-                  icon={<GraduationCap className="size-3.5" strokeWidth={1.75} />}
-                  onNavigate={() => {
-                    setOpen(false);
-                    router.push(`/cursos/${course.slug}`);
-                  }}
-                />
-              ))}
-            </ResultSection>
-          ) : null}
-
-          {results.books.length > 0 ? (
-            <ResultSection title="Libros">
-              {results.books.map((book) => (
-                <ResultRow
-                  key={book.id}
-                  href={`/libros/${book.slug}`}
-                  cover={book.cover_url}
-                  seed={book.slug}
-                  title={book.title}
-                  subtitle={book.author ?? "Autor desconocido"}
-                  icon={<BookOpen className="size-3.5" strokeWidth={1.75} />}
-                  onNavigate={() => {
-                    setOpen(false);
-                    router.push(`/libros/${book.slug}`);
-                  }}
-                />
-              ))}
-            </ResultSection>
-          ) : null}
-        </div>
+      {open && showResults ? (
+        <ResultsPanel
+          results={results}
+          pending={pending}
+          trimmedQuery={trimmedQuery}
+          onNavigate={() => setOpen(false)}
+          className="absolute left-0 right-0 top-full z-40 mt-2 max-h-[70vh] rounded-lg border border-line bg-surface shadow-xl"
+        />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Botón + overlay a pantalla completa para móvil. Reutiliza el mismo hook y
+ * panel, así que la lógica y el look empatan con la sidebar.
+ */
+export function GlobalSearchMobile({ className }: { className?: string }) {
+  const [open, setOpen] = useState(false);
+  const { query, setQuery, trimmedQuery, results, pending, showResults } = useCatalogSearch();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const id = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={cn(
+          "inline-flex size-9 items-center justify-center rounded-full border border-line bg-card text-foreground transition-colors hover:border-line-strong",
+          className,
+        )}
+        aria-label="Buscar en el catálogo"
+      >
+        <Search className="size-4" strokeWidth={2} />
+      </button>
+
+      {open ? (
+        <div className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur">
+          <div className="flex items-center gap-2 border-b border-line px-3 py-3">
+            <div className="relative flex-1">
+              <label htmlFor={id} className="sr-only">
+                Buscar en el catálogo
+              </label>
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <input
+                id={id}
+                ref={inputRef}
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Buscar cursos y libros"
+                autoComplete="off"
+                spellCheck={false}
+                className="h-10 w-full rounded-lg border border-line bg-card pl-9 pr-3 text-base text-foreground placeholder:text-subtle focus:border-line-strong focus:outline-none"
+              />
+              {pending ? (
+                <Loader2
+                  className="absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-subtle"
+                  aria-hidden
+                />
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="inline-flex size-10 items-center justify-center rounded-lg text-subtle transition-colors hover:text-foreground"
+              aria-label="Cerrar búsqueda"
+            >
+              <X className="size-5" strokeWidth={2} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            {showResults ? (
+              <ResultsPanel
+                results={results}
+                pending={pending}
+                trimmedQuery={trimmedQuery}
+                onNavigate={() => setOpen(false)}
+                className="h-full"
+              />
+            ) : (
+              <p className="px-6 py-8 text-center text-sm text-subtle">
+                Escribe al menos dos letras para buscar.
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { BookOpen, GraduationCap, Home, Share2, UserRound } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { TrialCountdown, AccessChip } from "@/components/access/trial-countdown";
-import { GlobalSearch } from "@/components/layout/global-search";
+import { GlobalSearch, GlobalSearchMobile } from "@/components/layout/global-search";
 import { cn } from "@/lib/utils";
 import type { AccessState, Profile } from "@/lib/types/domain";
 
@@ -105,7 +105,10 @@ export function MobileTopBar({ access }: { access: AccessState }) {
       <Link href="/" aria-label="Cursalia, ir al inicio">
         <Logo />
       </Link>
-      <AccessChip access={access} />
+      <div className="flex items-center gap-3">
+        <GlobalSearchMobile />
+        <AccessChip access={access} />
+      </div>
     </header>
   );
 }
